@@ -8,15 +8,17 @@ REPO="https://github.com/znnw4m6k7k-dotcom/ecom-finance-app"
 step() { printf '\n==> %s\n' "$*"; }
 
 step "1/8 获取代码"
+# 上次安装中断留下的半成品目录：挪到一边（不删除），重新获取
+if [ -e "$APP" ] && [ ! -d "$APP/.git" ]; then mv "$APP" "$APP.broken-$(date +%Y%m%d%H%M%S)"; echo "已把不完整的旧目录改名备份"; fi
 if [ -d "$APP/.git" ]; then
   GIT_TERMINAL_PROMPT=0 git -C "$APP" pull --ff-only "$REPO" main 2>/dev/null || git -C "$APP" pull --ff-only "$BUNDLE" main
 elif GIT_TERMINAL_PROMPT=0 git clone -q "$REPO" "$APP" 2>/dev/null; then echo "从 GitHub 克隆"
-else git clone -q "$BUNDLE" "$APP" && git -C "$APP" remote set-url origin "$REPO" && echo "从本地代码包克隆"; fi
+else git clone -q "$BUNDLE" "$APP"; git -C "$APP" remote set-url origin "$REPO"; echo "从本地代码包克隆"; fi
 cd "$APP"
 
 step "2/8 检查 Homebrew / Node"
 if ! command -v brew >/dev/null 2>&1; then
-  for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do [ -x "$b" ] && eval "$("$b" shellenv)"; done
+  for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$b" ]; then eval "$("$b" shellenv)"; fi; done
 fi
 NODE_MAJOR=$(node -v 2>/dev/null | sed 's/v\([0-9]*\).*/\1/' || echo 0)
 if [ "${NODE_MAJOR:-0}" -lt 20 ]; then
@@ -27,7 +29,7 @@ node -v
 
 step "3/8 PostgreSQL"
 if ! command -v psql >/dev/null 2>&1; then
-  for d in /opt/homebrew/opt/postgresql@16/bin /usr/local/opt/postgresql@16/bin /Applications/Postgres.app/Contents/Versions/latest/bin; do [ -d "$d" ] && export PATH="$d:$PATH"; done
+  for d in /opt/homebrew/opt/postgresql@16/bin /usr/local/opt/postgresql@16/bin /Applications/Postgres.app/Contents/Versions/latest/bin; do if [ -d "$d" ]; then export PATH="$d:$PATH"; fi; done
 fi
 if ! command -v psql >/dev/null 2>&1; then
   command -v brew >/dev/null || { echo "需要 PostgreSQL：请到 https://postgresapp.com 下载 Postgres.app，拖进“应用程序”，打开后点 Initialize，然后重跑本脚本"; exit 1; }
