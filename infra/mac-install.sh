@@ -53,6 +53,12 @@ if [ ! -f .env ]; then
 fi
 
 step "6/8 安装依赖并构建"
+# 国内网络：npm 官方源或 Prisma 引擎下载不通时，自动改用 npmmirror 镜像（只影响本次安装）
+if ! curl -fsS -m 8 -o /dev/null https://registry.npmjs.org/ 2>/dev/null || ! curl -sS -m 8 -o /dev/null https://binaries.prisma.sh/ 2>/dev/null; then
+  echo "检测到境外源较慢或不通，改用国内镜像"
+  export npm_config_registry=https://registry.npmmirror.com
+  export PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
+fi
 npm ci --no-audit --no-fund
 npm run build
 
