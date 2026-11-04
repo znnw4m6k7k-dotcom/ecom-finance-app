@@ -12,7 +12,13 @@ const EnvSchema = z.object({
   MODEL_PROVIDER: z.string().default('mock'),
   CONNECTOR_PROVIDER: z.string().default('mock'),
   /** 审核通过后通知谁：robot 模式发群；work_notice 模式发给这些角色里已绑定钉钉的员工 */
-  NOTIFY_ROLES: z.string().default('OWNER,FINANCE')
+  NOTIFY_ROLES: z.string().default('OWNER,FINANCE'),
+  /** 钉钉企业 CorpId（非密钥）：工作台 H5 微应用前端免登时需要 */
+  DINGTALK_CORP_ID: z.string().optional(),
+  /** 钉钉 AppKey（即 clientId，非密钥；AppSecret 只由连接器读取） */
+  DINGTALK_APP_KEY: z.string().optional(),
+  /** 钉钉 JSAPI 脚本地址（版本以钉钉官方文档为准） */
+  DINGTALK_JSAPI_URL: z.string().default('https://g.alicdn.com/dingding/dingtalk-jsapi/2.10.3/dingtalk.open.js')
 });
 export type AppConfig = z.infer<typeof EnvSchema>;
 

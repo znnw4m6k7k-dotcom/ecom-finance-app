@@ -75,8 +75,53 @@
     });
   }
 
+  // ---------- 钉钉工作台免登 ----------
+  function inDingTalk() { return /DingTalk/i.test(navigator.userAgent || ''); }
+  function urlTenant() {
+    var m = (location.search || '').match(/[?&]tenant=([^&]+)/);
+    if (m) return decodeURIComponent(m[1]);
+    try { return localStorage.getItem(TENANT_KEY) || ''; } catch (e) { return ''; }
+  }
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script'); s.src = src; s.onload = resolve; s.onerror = function () { reject(new Error('钉钉 JSAPI 加载失败')); };
+      document.head.appendChild(s);
+    });
+  }
+  function getAuthCode(cfg) {
+    return new Promise(function (resolve, reject) {
+      var dd = root.dd;
+      if (!dd) { reject(new Error('钉钉 JSAPI 不可用')); return; }
+      var done = function (r) { resolve(r.code || r.authCode); };
+      var fail = function (e) { reject(new Error('钉钉免登失败：' + ((e && (e.errorMessage || e.message)) || JSON.stringify(e)))); };
+      if (dd.requestAuthCode) dd.requestAuthCode({ corpId: cfg.corpId, clientId: cfg.clientId, onSuccess: done, onFail: fail, success: done, fail: fail });
+      else if (dd.runtime && dd.runtime.permission) dd.runtime.permission.requestAuthCode({ corpId: cfg.corpId, onSuccess: done, onFail: fail });
+      else fail({ message: '当前钉钉版本不支持免登' });
+    });
+  }
+  function dingtalkLogin() {
+    var tenant = urlTenant();
+    if (!inDingTalk() || !tenant) return Promise.resolve(null);
+    return request('GET', '/auth/dingtalk/config', undefined, { noAuthRedirect: true }).then(function (cfg) {
+      if (!cfg || !cfg.enabled) return null;
+      return loadScript(cfg.jsapiUrl).then(function () { return getAuthCode(cfg); }).then(function (code) {
+        return request('POST', '/auth/dingtalk', { tenant: tenant, authCode: code }, { noAuthRedirect: true });
+      }).then(function (res) {
+        setToken(res.token);
+        try { localStorage.setItem(TENANT_KEY, tenant); } catch (e) { /* ignore */ }
+        api.user = res.user;
+        return res.user;
+      });
+    }).catch(function (e) { showLogin(e.message); return new Promise(function (resolve) { loginResolve = resolve; }); });
+  }
+
   function ensureLogin() {
-    if (!getToken()) return new Promise(function (resolve) { loginResolve = resolve; showLogin(); });
+    if (!getToken()) {
+      return dingtalkLogin().then(function (u) {
+        if (u) return u;
+        return new Promise(function (resolve) { loginResolve = resolve; showLogin(); });
+      });
+    }
     return request('GET', '/auth/me', undefined, { noAuthRedirect: true }).then(function (me) { api.user = me; return me; }).catch(function () {
       setToken(null);
       return new Promise(function (resolve) { loginResolve = resolve; showLogin('请重新登录'); });

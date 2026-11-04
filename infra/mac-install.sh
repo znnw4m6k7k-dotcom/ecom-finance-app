@@ -68,3 +68,4 @@ curl -s localhost:${PORT:-3000}/api/v1/health && echo
 echo
 echo "完成：浏览器打开 http://localhost:${PORT:-3000}  企业代码 luye-demo  账号 owner / finance / viewer"
 echo "接钉钉群机器人：cd ~/ecom-finance-app && sh infra/set-dingtalk-robot.sh && sh infra/restart.sh"
+echo "放进钉钉工作台（测试）：cd ~/ecom-finance-app && bash infra/tunnel.sh   然后 sh infra/set-dingtalk-app.sh"

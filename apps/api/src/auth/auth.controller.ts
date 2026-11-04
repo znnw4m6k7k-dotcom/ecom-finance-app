@@ -6,7 +6,7 @@ import { can, PERMISSIONS, Permission, Role, ROLE_LABELS } from '@efa/domain';
 import type { WorkspaceConnector } from '@efa/workspace-connectors';
 import { AuthUser, CurrentUser, Public, RequirePermission } from '../common/auth';
 import { parseBody } from '../common/zod';
-import { WORKSPACE_CONNECTOR } from '../config';
+import { APP_CONFIG, AppConfig, WORKSPACE_CONNECTOR } from '../config';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma.service';
 
@@ -24,7 +24,8 @@ export class AuthController {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly audit: AuditService,
-    @Inject(WORKSPACE_CONNECTOR) private readonly connector: WorkspaceConnector
+    @Inject(WORKSPACE_CONNECTOR) private readonly connector: WorkspaceConnector,
+    @Inject(APP_CONFIG) private readonly cfg: AppConfig
   ) {}
 
   private async issue(user: { id: string; tenantId: string; role: string; username: string; displayName: string }) {
@@ -70,9 +71,16 @@ export class AuthController {
       where: { tenantId_provider_externalUserId: { tenantId: tenant.id, provider: 'dingtalk', externalUserId: ident.externalUserId } },
       include: { user: true }
     });
-    if (!link || !link.user.active) throw new UnauthorizedException('该钉钉账号尚未绑定系统账号，请联系管理员');
+    if (!link || !link.user.active) throw new UnauthorizedException(`该钉钉账号（userid：${ident.externalUserId}）尚未绑定系统账号，请把这个 userid 发给管理员绑定`);
     await this.audit.record(link.user, 'auth.login', { type: 'user', id: link.user.id }, { method: 'dingtalk' }, undefined, req.ip);
     return this.issue(link.user);
+  }
+
+  /** 前端判断是否走钉钉免登：只返回非密钥信息 */
+  @Public() @Get('dingtalk/config')
+  dingtalkConfig() {
+    const enabled = this.connector.provider === 'dingtalk' && this.connector.capabilities().login && !!this.cfg.DINGTALK_CORP_ID;
+    return enabled ? { enabled, corpId: this.cfg.DINGTALK_CORP_ID, clientId: this.cfg.DINGTALK_APP_KEY, jsapiUrl: this.cfg.DINGTALK_JSAPI_URL } : { enabled: false };
   }
 
   @Get('me') @RequirePermission('report:read')
