@@ -88,8 +88,14 @@
       document.head.appendChild(s);
     });
   }
+  // 钉钉首页地址可写 ?corpId=$CORPID$，钉钉打开时会替换成当前企业的 CorpId，免去手工配置
+  function urlCorpId() {
+    try { var v = new URLSearchParams(root.location.search).get('corpId'); return v && v.indexOf('$') < 0 ? v : ''; } catch (e) { return ''; }
+  }
   function getAuthCode(cfg) {
+    cfg = Object.assign({}, cfg, { corpId: urlCorpId() || cfg.corpId });
     return new Promise(function (resolve, reject) {
+      if (!cfg.corpId) { reject(new Error('钉钉免登失败：缺少 CorpId（首页地址请带 &corpId=$CORPID$）')); return; }
       var dd = root.dd;
       if (!dd) { reject(new Error('钉钉 JSAPI 不可用')); return; }
       var done = function (r) { resolve(r.code || r.authCode); };

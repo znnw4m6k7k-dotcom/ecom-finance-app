@@ -79,8 +79,8 @@ export class AuthController {
   /** 前端判断是否走钉钉免登：只返回非密钥信息 */
   @Public() @Get('dingtalk/config')
   dingtalkConfig() {
-    const enabled = this.connector.provider === 'dingtalk' && this.connector.capabilities().login && !!this.cfg.DINGTALK_CORP_ID;
-    return enabled ? { enabled, corpId: this.cfg.DINGTALK_CORP_ID, clientId: this.cfg.DINGTALK_APP_KEY, jsapiUrl: this.cfg.DINGTALK_JSAPI_URL } : { enabled: false };
+    const enabled = this.connector.provider === 'dingtalk' && this.connector.capabilities().login;
+    return enabled ? { enabled, corpId: this.cfg.DINGTALK_CORP_ID || null, clientId: this.cfg.DINGTALK_APP_KEY, jsapiUrl: this.cfg.DINGTALK_JSAPI_URL } : { enabled: false };
   }
 
   @Get('me') @RequirePermission('report:read')

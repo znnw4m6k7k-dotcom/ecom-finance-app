@@ -34,4 +34,4 @@ tmp=$(mktemp); grep -v '^PUBLIC_BASE_URL=' .env > "$tmp"; echo "PUBLIC_BASE_URL=
 sh infra/restart.sh >/dev/null
 echo
 echo "公网地址：$URL"
-echo "钉钉应用首页地址填：$URL/?tenant=luye-demo"
+echo "钉钉应用首页地址填：$URL/?tenant=luye-demo&corpId=\$CORPID\$"

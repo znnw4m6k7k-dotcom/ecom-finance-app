@@ -3,15 +3,15 @@
 set -e
 cd "$(dirname "$0")/.."
 [ -f .env ] || { echo "找不到 .env，请先完成安装"; exit 1; }
-printf "CorpId（开发者后台首页右上角或「企业信息」里，ding 开头；不是应用的 Client ID）："; read CORP
+printf "CorpId（可直接回车跳过：首页地址带 &corpId=\$CORPID\$ 时钉钉会自动提供）："; read CORP
 printf "AppKey（应用「凭证与基础信息」页的 Client ID，较短）："; read KEY
 printf "AppSecret（Client Secret，输入不显示）："; stty -echo; read SECRET; stty echo; echo
 printf "AgentId（应用基础信息页）："; read AGENT
 printf "通知方式：1=工作通知发给个人  2=继续用群机器人 [1]："; read CH
 [ "$CH" = "2" ] && CHANNEL=robot || CHANNEL=work_notice
-[ -n "$CORP" ] && [ -n "$KEY" ] && [ -n "$SECRET" ] && [ -n "$AGENT" ] || { echo "四个值都不能为空"; exit 1; }
+[ -n "$KEY" ] && [ -n "$SECRET" ] && [ -n "$AGENT" ] || { echo "AppKey、AppSecret、AgentId 不能为空"; exit 1; }
 # 防填错位：Client ID 一般是 ding 开头约 20 位；Secret 很长、常含 _ 或 -；CorpId 与 Client ID 不应相同
-[ "$CORP" = "$KEY" ] && { echo "CorpId 和 AppKey 填成一样了，请重新运行"; exit 1; }
+[ -n "$CORP" ] && [ "$CORP" = "$KEY" ] && { echo "CorpId 和 AppKey 填成一样了（CorpId 可以直接回车跳过），请重新运行"; exit 1; }
 case "$KEY" in *_*|*-*) echo "AppKey 里有 _ 或 -，看起来像是把 Client Secret 填进了 AppKey，请重新运行"; exit 1;; esac
 [ ${#KEY} -gt 40 ] && { echo "AppKey 太长，可能填成了 Client Secret，请重新运行"; exit 1; }
 case "$AGENT" in *[!0-9]*) echo "AgentId 应该是纯数字"; exit 1;; esac
