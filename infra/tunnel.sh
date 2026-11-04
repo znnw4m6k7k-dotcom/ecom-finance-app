@@ -7,10 +7,14 @@ mkdir -p logs
 CF=$(command -v cloudflared || true)
 [ -z "$CF" ] && [ -x tools/cloudflared ] && CF=tools/cloudflared
 if [ -z "$CF" ]; then
+  for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$b" ]; then eval "$("$b" shellenv)"; fi; done
+  if command -v brew >/dev/null 2>&1; then brew install cloudflared && CF=$(command -v cloudflared); fi
+fi
+if [ -z "$CF" ]; then
   # 没有 Homebrew 也能用：直接从 cloudflared 官方 GitHub Release 下载单文件
   case "$(uname -m)" in arm64) ARCH=arm64;; *) ARCH=amd64;; esac
   mkdir -p tools
-  curl -fL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-$ARCH.tgz" -o tools/cf.tgz
+  curl -fL --connect-timeout 15 --max-time 300 "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-$ARCH.tgz" -o tools/cf.tgz
   tar -xzf tools/cf.tgz -C tools && rm tools/cf.tgz && chmod +x tools/cloudflared
   CF=tools/cloudflared
 fi
