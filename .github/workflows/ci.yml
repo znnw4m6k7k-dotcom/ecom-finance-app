@@ -31,3 +31,5 @@ jobs:
         run: npm run test:unit
       - name: API 集成测试（真实 PostgreSQL，模型/连接器为 Mock）
         run: npm run test:api
+      - name: 部署脚本测试（preflight、新项目脚本）
+        run: npm run test:infra

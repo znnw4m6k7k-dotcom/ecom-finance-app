@@ -31,7 +31,8 @@ packages/workspace-connectors 办公平台连接器：钉钉（实现）、飞�
 infra/                      Docker Compose、Dockerfile、发布与回滚
 docs/                       映射表、待确认事项、能力矩阵、验收清单、里程碑报告
 input/demo/                 原始 Demo（不修改）
-.claude/skills/             Demo 导入、连接器开发、发布评审
+.claude/skills/             交付技能：demo-to-enterprise（总流程）、client-onboarding（客户资料清单）、go-live（部署+踩坑）、demo-import、connector-dev、release-review
+template/                   作为样板开新项目：样板说明、空白文档模板（infra/new-project.sh 使用）
 ```
 
 ## 快速开始
