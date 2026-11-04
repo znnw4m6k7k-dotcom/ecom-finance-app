@@ -11,9 +11,9 @@ import { TABLE_SPECS, toDbRow } from './dataset/table-specs';
 export async function seed(prisma: PrismaClient, opts: { passwords?: Partial<Record<'owner' | 'finance' | 'viewer', string>>; reset?: boolean } = {}) {
   if (process.env.NODE_ENV === 'production' && !opts.passwords) throw new Error('生产环境禁止使用种子默认密码');
   const pw = {
-    owner: opts.passwords?.owner ?? process.env.SEED_OWNER_PASSWORD ?? 'owner-dev-123',
-    finance: opts.passwords?.finance ?? process.env.SEED_FINANCE_PASSWORD ?? 'finance-dev-123',
-    viewer: opts.passwords?.viewer ?? process.env.SEED_VIEWER_PASSWORD ?? 'viewer-dev-123'
+    owner: opts.passwords?.owner ?? (process.env.SEED_OWNER_PASSWORD || 'owner-dev-123'),
+    finance: opts.passwords?.finance ?? (process.env.SEED_FINANCE_PASSWORD || 'finance-dev-123'),
+    viewer: opts.passwords?.viewer ?? (process.env.SEED_VIEWER_PASSWORD || 'viewer-dev-123')
   };
   const demo: Dataset = buildDemoData();
   if (opts.reset) {
