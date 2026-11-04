@@ -4,12 +4,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p logs
-if ! command -v cloudflared >/dev/null 2>&1; then
-  for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do [ -x "$b" ] && eval "$("$b" shellenv)"; done
-  brew install cloudflared
+CF=$(command -v cloudflared || true)
+[ -z "$CF" ] && [ -x tools/cloudflared ] && CF=tools/cloudflared
+if [ -z "$CF" ]; then
+  # 没有 Homebrew 也能用：直接从 cloudflared 官方 GitHub Release 下载单文件
+  case "$(uname -m)" in arm64) ARCH=arm64;; *) ARCH=amd64;; esac
+  mkdir -p tools
+  curl -fL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-$ARCH.tgz" -o tools/cf.tgz
+  tar -xzf tools/cf.tgz -C tools && rm tools/cf.tgz && chmod +x tools/cloudflared
+  CF=tools/cloudflared
 fi
 [ -f logs/tunnel.pid ] && kill "$(cat logs/tunnel.pid)" 2>/dev/null || true
-nohup cloudflared tunnel --no-autoupdate --url http://localhost:${PORT:-3000} > logs/tunnel.log 2>&1 &
+nohup "$CF" tunnel --no-autoupdate --url http://localhost:${PORT:-3000} > logs/tunnel.log 2>&1 &
 echo $! > logs/tunnel.pid
 URL=""
 for i in $(seq 1 30); do

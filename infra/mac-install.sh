@@ -30,7 +30,7 @@ if ! command -v psql >/dev/null 2>&1; then
   for d in /opt/homebrew/opt/postgresql@16/bin /usr/local/opt/postgresql@16/bin /Applications/Postgres.app/Contents/Versions/latest/bin; do [ -d "$d" ] && export PATH="$d:$PATH"; done
 fi
 if ! command -v psql >/dev/null 2>&1; then
-  command -v brew >/dev/null || { echo "需要 PostgreSQL，且没有 Homebrew"; exit 1; }
+  command -v brew >/dev/null || { echo "需要 PostgreSQL：请到 https://postgresapp.com 下载 Postgres.app，拖进“应用程序”，打开后点 Initialize，然后重跑本脚本"; exit 1; }
   brew install postgresql@16
   export PATH="$(brew --prefix postgresql@16)/bin:$PATH"
 fi
