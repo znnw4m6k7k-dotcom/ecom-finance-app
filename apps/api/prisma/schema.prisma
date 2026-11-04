@@ -1,0 +1,390 @@
+// 电商财务集成系统 · 数据模型
+// 原则：所有业务表都带 tenantId，并以 (tenantId, 业务主键) 作为主键；业务查询必须带 tenantId（见 src/common/tenant）。
+// 字段命名沿用 Demo 数据契约（input/demo/docs/data-schema.md），以便直接复用核算引擎。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  FINANCE
+  VIEWER
+}
+
+enum BriefingStatus {
+  DRAFT
+  FAILED
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  name      String
+  meta      Json
+  settings  Json
+  createdAt DateTime @default(now())
+  users     User[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  username     String
+  displayName  String
+  passwordHash String
+  role         Role
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  identities   ExternalIdentity[]
+
+  @@unique([tenantId, username])
+}
+
+/// 办公平台账号 ↔ 内部用户（只存平台用户 ID，不同步通讯录）
+model ExternalIdentity {
+  id             String   @id @default(uuid())
+  tenantId       String
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  provider       String
+  externalUserId String
+  createdAt      DateTime @default(now())
+
+  @@unique([tenantId, provider, externalUserId])
+  @@index([tenantId, userId])
+}
+
+// ---------------- 主数据 ----------------
+model Store {
+  tenantId         String
+  id               String
+  platform         String
+  name             String
+  commission_rate  Decimal @db.Decimal(8, 6)
+  tech_fee_rate    Decimal @db.Decimal(8, 6)
+  payment_fee_rate Decimal @db.Decimal(8, 6)
+  insurance_rate   Decimal @db.Decimal(8, 6)
+  settlement_days  Int
+
+  @@id([tenantId, id])
+}
+
+model Supplier {
+  tenantId String
+  id       String
+  name     String
+  tax_rate Decimal? @db.Decimal(8, 6)
+  terms    String?
+
+  @@id([tenantId, id])
+}
+
+model Sku {
+  tenantId     String
+  id           String
+  name         String
+  category     String?
+  spec         String?
+  list_price   Decimal? @db.Decimal(14, 2)
+  supplier_id  String?
+  launch_month String?
+  status       String?
+
+  @@id([tenantId, id])
+}
+
+model Employee {
+  tenantId         String
+  id               String
+  name             String
+  role             String
+  base_salary      Decimal  @db.Decimal(14, 2)
+  allowance        Decimal  @db.Decimal(14, 2)
+  deduction        Decimal  @db.Decimal(14, 2)
+  basis            String?
+  store_ids        String[]
+  commission_share Decimal? @db.Decimal(8, 6)
+  joined_at        DateTime? @db.Date
+  active           Boolean?
+
+  @@id([tenantId, id])
+}
+
+model OpeningInventory {
+  tenantId  String
+  sku_id    String
+  qty       Int
+  unit_cost Decimal @db.Decimal(14, 4)
+
+  @@id([tenantId, sku_id])
+}
+
+// ---------------- 交易明细 ----------------
+model Order {
+  tenantId      String
+  id            String
+  store_id      String
+  order_date    DateTime  @db.Date
+  status        String?
+  paid_amount   Decimal   @db.Decimal(14, 2)
+  refund_amount Decimal   @db.Decimal(14, 2)
+  refund_date   DateTime? @db.Date
+  ship_date     DateTime? @db.Date
+  carrier       String?
+  province      String?
+  returned      Boolean   @default(false)
+
+  @@id([tenantId, id])
+  @@index([tenantId, store_id, order_date])
+}
+
+model OrderItem {
+  pk            Int     @id @default(autoincrement())
+  tenantId      String
+  order_id      String
+  sku_id        String
+  qty           Int
+  amount        Decimal @db.Decimal(14, 2)
+  refund_amount Decimal @db.Decimal(14, 2)
+  refund_qty    Int
+
+  @@index([tenantId, order_id])
+}
+
+model Shipment {
+  tenantId       String
+  id             String
+  order_id       String
+  carrier        String?
+  province       String?
+  weight_kg      Decimal?  @db.Decimal(10, 3)
+  base_fee       Decimal   @db.Decimal(14, 2)
+  overweight_fee Decimal   @db.Decimal(14, 2)
+  surcharge      Decimal   @db.Decimal(14, 2)
+  return_fee     Decimal   @db.Decimal(14, 2)
+  shipped_at     DateTime? @db.Date
+  returned       Boolean   @default(false)
+
+  @@id([tenantId, id])
+  @@index([tenantId, order_id])
+}
+
+model PurchaseOrder {
+  tenantId    String
+  id          String
+  supplier_id String
+  date        DateTime @db.Date
+  status      String?
+  invoice_no  String?
+
+  @@id([tenantId, id])
+}
+
+model PurchaseItem {
+  pk         Int     @id @default(autoincrement())
+  tenantId   String
+  po_id      String
+  sku_id     String
+  qty        Int
+  unit_price Decimal @db.Decimal(14, 4)
+  amount     Decimal @db.Decimal(14, 2)
+
+  @@index([tenantId, po_id])
+}
+
+model PlatformBill {
+  tenantId          String
+  id                String
+  store_id          String
+  period            String
+  gmv               Decimal   @db.Decimal(14, 2)
+  refund_amount     Decimal   @db.Decimal(14, 2)
+  commission        Decimal   @db.Decimal(14, 2)
+  tech_service_fee  Decimal   @db.Decimal(14, 2)
+  payment_fee       Decimal   @db.Decimal(14, 2)
+  promotion_fee     Decimal   @db.Decimal(14, 2)
+  freight_insurance Decimal   @db.Decimal(14, 2)
+  subsidy           Decimal   @db.Decimal(14, 2)
+  other_deduction   Decimal   @db.Decimal(14, 2)
+  settled_amount    Decimal   @db.Decimal(14, 2)
+  status            String?
+  payout_date       DateTime? @db.Date
+  note              String?
+
+  @@id([tenantId, id])
+}
+
+model Payout {
+  tenantId String
+  id       String
+  store_id String
+  bill_id  String?
+  date     DateTime @db.Date
+  amount   Decimal  @db.Decimal(14, 2)
+  bank_ref String?
+
+  @@id([tenantId, id])
+}
+
+model Expense {
+  tenantId   String
+  id         String
+  date       DateTime @db.Date
+  category   String
+  store_id   String?
+  vendor     String?
+  amount     Decimal  @db.Decimal(14, 2)
+  invoice_no String?
+
+  @@id([tenantId, id])
+}
+
+model Invoice {
+  tenantId     String
+  id           String
+  direction    String
+  number       String?
+  date         DateTime @db.Date
+  seller       String?
+  buyer        String?
+  amount       Decimal  @db.Decimal(14, 2)
+  tax_amount   Decimal  @db.Decimal(14, 2)
+  related_type String?
+  related_id   String?
+  note         String?
+
+  @@id([tenantId, id])
+}
+
+// ---------------- 业务流程 ----------------
+/// 每次导入一条记录：校验结果、写入行数、操作人
+model ImportBatch {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tableId     String
+  fileName    String
+  mode        String
+  status      String // committed | rejected
+  rows        Int
+  written     Int
+  errorCount  Int
+  errors      Json
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+/// 月度经营简报：facts 由系统核算（不可被 AI 修改），draft 为 AI/人工文字
+model Briefing {
+  id             String         @id @default(uuid())
+  tenantId       String
+  month          String
+  status         BriefingStatus
+  version        Int            @default(1)
+  facts          Json
+  draft          Json?
+  unverified     String[]
+  promptVersion  String
+  modelProvider  String
+  modelName      String
+  modelIsMock    Boolean
+  error          String?
+  createdById    String
+  updatedById    String
+  submittedAt    DateTime?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  reviewComment  String?
+  approvedVersion Int?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  versions       BriefingVersion[]
+  notifications  NotificationDelivery[]
+
+  @@index([tenantId, month])
+}
+
+model BriefingVersion {
+  id          String   @id @default(uuid())
+  tenantId    String
+  briefingId  String
+  briefing    Briefing @relation(fields: [briefingId], references: [id])
+  version     Int
+  source      String // ai | human
+  draft       Json
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@unique([briefingId, version])
+}
+
+/// 每一次模型调用（含失败）：用于成本、失败率统计
+model AiCall {
+  id           String   @id @default(uuid())
+  tenantId     String
+  purpose      String
+  refId        String?
+  provider     String
+  model        String
+  isMock       Boolean
+  attempt      Int
+  ok           Boolean
+  latencyMs    Int
+  inputTokens  Int
+  outputTokens Int
+  costCny      Decimal? @db.Decimal(12, 4)
+  errorKind    String?
+  error        String?
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+/// 通知投递记录；idempotencyKey 唯一，保证同一简报同一版本只发一次
+model NotificationDelivery {
+  id             String    @id @default(uuid())
+  tenantId       String
+  briefingId     String?
+  briefing       Briefing? @relation(fields: [briefingId], references: [id])
+  provider       String
+  channel        String
+  isMock         Boolean
+  idempotencyKey String    @unique
+  recipients     String[]
+  title          String
+  status         String // pending | sent | failed
+  attempts       Int       @default(0)
+  externalId     String?
+  error          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([tenantId, createdAt])
+}
+
+/// 审计事件：重要写操作必记；只追加不修改
+model AuditEvent {
+  id         String   @id @default(uuid())
+  tenantId   String
+  actorId    String?
+  actorName  String?
+  action     String
+  targetType String?
+  targetId   String?
+  detail     Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}

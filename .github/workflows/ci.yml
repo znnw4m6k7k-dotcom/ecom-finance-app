@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app_dev_only
+          POSTGRES_DB: ecomfin_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U app" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://app:app_dev_only@localhost:5432/ecomfin_test?schema=public
+      DATABASE_URL: postgresql://app:app_dev_only@localhost:5432/ecomfin_test?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - name: 单元测试（核算引擎、简报、模型适配、连接器、前端图表）
+        run: npm run test:unit
+      - name: API 集成测试（真实 PostgreSQL，模型/连接器为 Mock）
+        run: npm run test:api

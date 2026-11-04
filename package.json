@@ -1,0 +1,33 @@
+{
+  "name": "ecom-finance-app",
+  "private": true,
+  "version": "0.1.0",
+  "description": "电商财务集成系统：由 HTML Demo 演进的企业应用（第一阶段：本地业务闭环）",
+  "workspaces": [
+    "packages/domain",
+    "packages/model-adapters",
+    "packages/workspace-connectors",
+    "apps/api",
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build -w packages/domain -w packages/model-adapters -w packages/workspace-connectors -w apps/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:unit": "npm run test -w packages/domain -w packages/model-adapters -w packages/workspace-connectors -w apps/web",
+    "test:api": "npm run test -w apps/api",
+    "db:migrate": "npm run db:migrate -w apps/api",
+    "db:seed": "npm run db:seed -w apps/api",
+    "dev": "npm run start -w apps/api"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.18.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.4",
+    "typescript": "^5.9.3"
+  }
+}

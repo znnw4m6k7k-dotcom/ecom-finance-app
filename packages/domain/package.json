@@ -1,0 +1,14 @@
+{
+  "name": "@efa/domain",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "legacy/src"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test legacy/tests/*.test.js && jest"
+  },
+  "dependencies": { "zod": "^3.25.76" }
+}

@@ -1,0 +1,183 @@
+{
+  "version": "v2",
+  "freeze_version": "v2",
+  "release_status": "ready",
+  "checked_at": "2026-11-02T15:27:35+08:00",
+  "freeze_integrity": {
+    "files_listed": 24,
+    "sha256_match": 24,
+    "mismatch_or_missing": 0,
+    "frozen_at": "2026-11-02T07:24:07.282Z",
+    "test_commands": ["node --test"]
+  },
+  "v1_to_v2_diff": {
+    "changed": ["src/style.css", "src/app.js", "docs/data-schema.md", "使用说明.md", "电商财务集成管理系统.html"],
+    "unchanged_vs_v1": ["src/data.js", "src/engine.js", "src/importer.js", "src/views.js", "src/ui.js", "src/templates.js", "src/charts.js", "src/xlsx.js", "src/index.html", "build/build.mjs", "tests/charts.test.js", "tests/demo.test.js", "tests/engine.test.js", "tests/importer.test.js", "tests/xlsx.test.js"],
+    "note": "数据/引擎/导入/视图层与 v1 逐字节一致（sha256 相同），改动只在打印样式、首页现金流卡、文档与重建后的单文件 HTML，符合本次返工范围。"
+  },
+  "test_summary": "node --test（项目根目录，交付模式）：tests 62 / pass 62 / fail 0 / cancelled 0 / skipped 0 / todo 0，duration_ms 618，exit code 0。与 v1 一致，无新增失败或跳过。",
+  "focus_checks": [
+    {
+      "id": "F1",
+      "title": "打印宽表裁切（v1 阻断项）",
+      "status": "pass",
+      "evidence": "①print media + A4 可打印宽度（717px）量测：店铺利润 12 列（…净利润▼/净利率/利润占比）tableW=715=wrapW=715、th 越界 0、单元格溢出 0、.table-wrap overflow-x=visible；平台结算「账单明细」13 列（…结算金额/重算/差异/状态）tableW=715=wrapW、th 越界 0、溢出 0；商品利润/工资/物流/发票/库存各表同样 0 溢出、table-layout=fixed、font-size=8px。②实际 Page.printToPDF（A4 8.27×11.69in、四边 0.4in）：店铺利润 PDF 1 页，表头完整到「利润占比」，可见 15.99% / 66.25% 与合计行 12.4% / 100%（截图 /tmp/qa-v1/v2-print-stores-a4.png）；平台结算 PDF 2 页，第 1 页账单明细完整到「状态」，可见 ¥225,368.81 / ¥225,369.31 / ¥-0.50 / 待结算、¥151,018.47 / ¥0.00 等（截图 /tmp/qa-v1/v2-print-settlement-a4.png）；采购与库存 PDF 3 页（/tmp/qa-v1/v2-print-inventory-a4.pdf）。③交付 HTML 内已包含 `.table-wrap { overflow: visible`、`table-layout: fixed` 打印规则。",
+      "note": "净利率、利润占比、重算、差异、状态五列均已在 PDF 中出现，v1 的裁切已修复。"
+    },
+    {
+      "id": "F2",
+      "title": "现金流 KPI 口径不一致",
+      "status": "pass",
+      "evidence": "首页现金流卡标签改为「现金流 截至 2026-10-31」、副标「累计已回款」。实测：全部账期/全部店铺 138.6 万 + 待结算 77.2 万 + 账期占款 91.9 万；点「8月」后仍为 138.6 / 77.2 / 91.9（而净利润 31.9 万→10.9 万，说明账期筛选本身有效）；8月 + TB01 → 70.9 / 39.6 / 47.2；切 9月 + TB01 仍 70.9 / 39.6 / 47.2（时点口径不随账期变）；9月 + XHS01 → 41.4 / 22.5 / 27.6。与引擎 cash.byStore 独立值一致（TB01 709,006.80 / 396,043.99 / 472,494.69；XHS01 414,222.87 / 225,368.81 / 276,199.70），卡面 title 写明「时点口径（截至数据截止日）」。",
+      "note": "三个数字同口径且标签明确，不再出现 v1 的混用。"
+    },
+    {
+      "id": "F3",
+      "title": "打印版 KPI 卡片单列/页数偏多",
+      "status": "pass",
+      "evidence": "print media 下 `.kpi-grid` computed gridTemplateColumns 为 3 列；`.kpi-spark` 全部 display:none。总览 printToPDF 页数：v1 = 4 页 → v2 = 3 页（同一 A4/0.4in 参数），第 1 页可见 3 列 KPI（净利润 / 店铺排名 / 现金流）+ 第二行（成本结构 / 库存），打印标题「麓野 · 财务中枢 | 经营总览 · 全部账期 | 数据截止 2026-10-31」（截图 /tmp/qa-v1/v2-print-overview-a4.png）。",
+      "note": "KPI 打印改 3 列，总览打印页数减少 1 页。"
+    },
+    {
+      "id": "F4",
+      "title": "文档退款/现金流口径与实现不一致",
+      "status": "pass",
+      "evidence": "docs/data-schema.md §2.1 现为「退款 = 按退款发生月份归集的 refund_amount 合计（无退款日期时按订单月份；跨月退款冲减次月收入与成本）」，与 src/engine.js 中 `rm = monthOf(it.refund_date || o.refund_date || o.order_date)` 的实现一致；使用说明.md §4「现金流：时点口径，始终显示截至数据截止日（2026-10-31）的累计已回款、未结算账单金额与账期占款，不随账期切换；选店铺时显示该店口径」与 src/app.js 新实现一致；平台费率参考也已更新。全文复查无「当月订单 refund_amount 合计」「已回款按月」等矛盾表述。",
+      "note": "文档、引擎、界面三处口径已对齐。"
+    }
+  ],
+  "items": [
+    {
+      "id": "requirement-1",
+      "status": "pass",
+      "evidence": "v2 单文件 339,293 字节；file:// 打开正常，performance resource 条目 0、外部请求 0、fetch/XHR 调用 0；HTML 静态扫描 http(s) 引用仍只有 2 处 SVG 命名空间，无 login/password/Authorization。",
+      "note": "回归抽查通过（离线/无登录不变）。"
+    },
+    {
+      "id": "requirement-2",
+      "status": "pass",
+      "evidence": "1440×900 下 5 张 .card.kpi 全部在首屏（maxBottom=475 < 900）；现金流卡标签已改为「现金流 截至 2026-10-31」，数值同 v1（31.9 万/12.4%、21.1/6.3/4.4 万、138.6/77.2/91.9 万、50.31/2.17/8.08/10.23/12.82/3.99%、124.7 万/68 天/3.3 万）。",
+      "note": "回归抽查通过。"
+    },
+    {
+      "id": "requirement-3",
+      "status": "pass",
+      "evidence": "data.js/engine.js 与 v1 同哈希（b43b5d59…/637e9d70…），数值未变：净利润 318,550.02、营业收入 2,568,362.18；筛选 8 月净利 10.9 万→9 月 9.9 万、TB01 6.5 万/XHS01 2 万仍随筛选变化；下钻仍为明细；导入 1 单后订单 15,190→15,191、营业收入 2,568,561 并重算。",
+      "note": "回归抽查通过（汇总仍由明细计算）。"
+    },
+    {
+      "id": "requirement-4",
+      "status": "pass",
+      "evidence": "回归抽查：valid-orders.csv → 预览「校验通过、读取 1 / 通过 1 / 将写入 2 / 错误 0」，「确认导入并重算」可用 → toast「导入完成，已重新核算」→ 订单 15,190→15,191、总览营业收入 2,568,561。导入代码 importer.js 与 v1 同哈希。",
+      "note": "回归抽查通过（v1 已做完整四类导入测试，v2 仅抽 1 条）。"
+    },
+    {
+      "id": "requirement-5",
+      "status": "pass",
+      "evidence": "结算页回归：账单 GMV 273.2 万、退款 ¥167,573、结算 215.8 万、差异 4 笔 ¥34.70「均已有说明」、待结算 77.2 万（3 张账单）；账单明细 13 列；XHS01-202610 行 −0.50 有说明；打印后 13 列完整（见 F1）。",
+      "note": "回归抽查通过。"
+    },
+    {
+      "id": "requirement-6",
+      "status": "pass",
+      "evidence": "物流页回归：5.6 万 / 15,190 张面单 / 单均 ¥3.67 / 退回运费 2,219（3.98%）/ 费率 2.17%；承运商、省份、店铺三表数据同 v1。",
+      "note": "回归抽查通过。"
+    },
+    {
+      "id": "requirement-7",
+      "status": "pass",
+      "evidence": "库存页回归：124.7 万 / 22,490 件 / 均价 ¥55.43 / 周转 68 天 / 滞销 2 个 SKU / 采购 187.7 万（9 单 3 供）；月度表 2026-08 期初 661,831 → 期末 839,222 同 v1。",
+      "note": "回归抽查通过。"
+    },
+    {
+      "id": "requirement-8",
+      "status": "pass",
+      "evidence": "工资页回归：应发 32.9 万（12.82%）/ 实发 28.8 万 / 提成 4 万 / 人均 36,583；设置把三档提成改 10% → 应发 42.5 万、净利 22.3 万（与独立重算 425,257.56 / 222,540.41 一致）；刷新后仍 10.00×3；点恢复默认 → 2.00/3.00/4.00、净利回到 31.9 万。",
+      "note": "回归抽查通过。"
+    },
+    {
+      "id": "requirement-9",
+      "status": "pass",
+      "evidence": "现金流改为时点口径并标注（F2 详见）：138.6/77.2/91.9 万（全公司）、70.9/39.6/47.2 万（TB01）、41.4/22.5/27.6 万（XHS01），与引擎 byStore 值一致；打款 vs 账单差异 −0.50 仍在差异清单。",
+      "note": "v1 发现的口径不一致已修复，本轮复验通过。"
+    },
+    {
+      "id": "requirement-10",
+      "status": "pass",
+      "evidence": "发票页回归：进项 51 张 213.9 万（已匹配 50）、销项 9 张 256.4 万（已匹配 9）、未匹配 1 张、缺失 7.6 万（采购 1 + 费用 5）；异常清单与下钻同 v1。",
+      "note": "回归抽查通过。"
+    },
+    {
+      "id": "requirement-11",
+      "status": "pass",
+      "evidence": "data.js 与 v1 同哈希，演示数据未变：3 月（2026-08~10）、3 店、36 SKU、15,190 订单；首页勾稽 8/8 通过、0 项异常。",
+      "note": "回归抽查通过。"
+    },
+    {
+      "id": "requirement-12",
+      "status": "pass",
+      "evidence": "①导出 CSV 回归：总览导出「经营总览-全部账期.csv」468 字节、头部 ef bb bf（BOM）、表头「指标,数值,口径」、营业收入 2,568,362.18 与独立重算一致。②打印：print media 下 sidebar/topbar display:none、可见按钮 0、打印标题正常（「麓野 · 财务中枢 | 经营总览 · 全部账期 | 数据截止 2026-10-31」）；③表格不截断（v1 阻断项）已修复：店铺利润 PDF 12 列全含（净利率 15.99%、利润占比 66.25%）、平台结算 PDF 13 列全含（结算金额/重算/差异/状态），717px 打印宽度下 th 越界 0、单元格溢出 0。",
+      "note": "v1 唯一阻断项已修复，本轮通过。"
+    },
+    {
+      "id": "requirement-13",
+      "status": "pass",
+      "evidence": "口径与说明页回归：仍为 21 条公式 + 8 项勾稽规则 + 数据来源表；首页 5 个 KPI 的 .kpi-label title 公式仍在（现金流卡的 title 已更新为时点口径说明）；改设置/导入后自动重算已复验。",
+      "note": "回归抽查通过。"
+    },
+    {
+      "id": "requirement-14",
+      "status": "pass",
+      "evidence": "首页「勾稽校验 8 项自动核对 8/8 通过」，8 项全部 ok、0 项异常；下钻（点校验项）仍可看期望/实际/差异。",
+      "note": "回归抽查通过（v1 已验证不一致告警路径，本轮数据未变）。"
+    }
+  ],
+  "findings": [
+    {
+      "id": "F5",
+      "severity": "suggestion",
+      "requirement": "requirement-12",
+      "title": "打印字号 8px（约 6pt）偏小",
+      "detail": "为把 13 列压进 A4 纵向，v2 打印态用 table.data{font-size:8px}。PDF 上可读但偏小，正式汇报打印建议 9px 或对 12/13 列表格用 A4 横向。非阻断。",
+      "repro": "按 A4 纵向打印「平台结算」为 PDF，13 列表格字号明显小于正文。"
+    }
+  ],
+  "must_fix": [],
+  "suggestions": [
+    "F5：打印字号可回调到 9px，或对 12/13 列的「店铺利润」「平台结算」使用 @page 横向，兼顾可读性。",
+    "v1 遗留的两条建议已随 v2 落地（现金流口径、打印 KPI 多列），无需再跟踪。"
+  ],
+  "release_gaps": [
+    "无阻断项。合同范围内未包含（不计入验收）：多人账号权限、服务器部署、平台 API 直连、报税、发票税额抵扣。"
+  ],
+  "regression": {
+    "console_errors": 0,
+    "console_warnings": 0,
+    "unhandled_rejections": 0,
+    "network_calls": 0,
+    "external_resources": 0,
+    "pages_rendered": 11,
+    "pages_with_bad_text": 0,
+    "checks": "8/8",
+    "drilldowns": ["store", "sku", "bill", "employee", "invoice"],
+    "recent_orders_in_modal": 10
+  },
+  "artifacts": {
+    "pdf": {
+      "stores": {"file": "/tmp/qa-v1/v2-print-stores-a4.pdf", "pages": 1, "cols": 12},
+      "settlement": {"file": "/tmp/qa-v1/v2-print-settlement-a4.pdf", "pages": 2, "cols": 13},
+      "overview": {"file": "/tmp/qa-v1/v2-print-overview-a4.pdf", "pages": 3, "v1_pages": 4},
+      "inventory": {"file": "/tmp/qa-v1/v2-print-inventory-a4.pdf", "pages": 3}
+    },
+    "screenshots": [
+      "/tmp/qa-v1/v2-print-stores-a4.png",
+      "/tmp/qa-v1/v2-print-settlement-a4.png",
+      "/tmp/qa-v1/v2-print-overview-a4.png",
+      "/tmp/qa-v1/v2-print-inventory-a4.png",
+      "/tmp/qa-v1/v2-print-stores-dom.png",
+      "/tmp/qa-v1/v2-print-overview-media.png"
+    ],
+    "test_log": "/tmp/qa-v1/node-test-v2.log",
+    "freeze_check": "/tmp/qa-v1/verify-freeze.mjs"
+  }
+}
