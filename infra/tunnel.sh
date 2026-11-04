@@ -19,7 +19,7 @@ if [ -z "$CF" ]; then
   CF=tools/cloudflared
 fi
 [ -f logs/tunnel.pid ] && kill "$(cat logs/tunnel.pid)" 2>/dev/null || true
-nohup "$CF" tunnel --no-autoupdate --url http://localhost:${PORT:-3000} > logs/tunnel.log 2>&1 &
+nohup "$CF" tunnel --no-autoupdate --protocol http2 --url http://localhost:${PORT:-3000} > logs/tunnel.log 2>&1 &
 echo $! > logs/tunnel.pid
 URL=""
 for i in $(seq 1 30); do
@@ -27,6 +27,9 @@ for i in $(seq 1 30); do
   [ -n "$URL" ] && break; sleep 1
 done
 [ -n "$URL" ] || { echo "没拿到隧道地址，看 logs/tunnel.log"; exit 1; }
+# 地址分配后还要等隧道真正连上 Cloudflare（否则访问会报 Error 1033）
+for i in $(seq 1 30); do grep -q "Registered tunnel connection" logs/tunnel.log && break; sleep 1; done
+grep -q "Registered tunnel connection" logs/tunnel.log || { echo "隧道没连上 Cloudflare（网络可能拦截），看 logs/tunnel.log 最后几行"; tail -5 logs/tunnel.log; exit 1; }
 tmp=$(mktemp); grep -v '^PUBLIC_BASE_URL=' .env > "$tmp"; echo "PUBLIC_BASE_URL=$URL" >> "$tmp"; mv "$tmp" .env; chmod 600 .env
 sh infra/restart.sh >/dev/null
 echo
