@@ -1,0 +1,38 @@
+# 服务器部署：PostgreSQL（不对外）+ API + Caddy（自动 HTTPS）
+# 由 server-install.sh 调用：docker compose -f infra/server/docker-compose.prod.yml --env-file .env up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 未设置}
+      POSTGRES_DB: ecomfin
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d ecomfin"]
+      interval: 5s
+      retries: 20
+  api:
+    build: { context: ../.., dockerfile: infra/Dockerfile }
+    image: ecom-finance-app:${APP_VERSION:-latest}
+    restart: unless-stopped
+    depends_on: { db: { condition: service_healthy } }
+    env_file: ../../.env
+    environment:
+      DATABASE_URL: postgresql://app:${DB_PASSWORD}@db:5432/ecomfin?schema=public
+      PORT: 3000
+      NODE_ENV: production
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [api]
+    ports: ["80:80", "443:443"]
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN 未设置}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+volumes:
+  dbdata:
+  caddydata:
