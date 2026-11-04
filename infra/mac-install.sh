@@ -9,8 +9,8 @@ step() { printf '\n==> %s\n' "$*"; }
 
 step "1/8 获取代码"
 if [ -d "$APP/.git" ]; then
-  git -C "$APP" pull --ff-only "$REPO" main 2>/dev/null || git -C "$APP" pull --ff-only "$BUNDLE" main
-elif git clone -q "$REPO" "$APP" 2>/dev/null; then echo "从 GitHub 克隆"
+  GIT_TERMINAL_PROMPT=0 git -C "$APP" pull --ff-only "$REPO" main 2>/dev/null || git -C "$APP" pull --ff-only "$BUNDLE" main
+elif GIT_TERMINAL_PROMPT=0 git clone -q "$REPO" "$APP" 2>/dev/null; then echo "从 GitHub 克隆"
 else git clone -q "$BUNDLE" "$APP" && git -C "$APP" remote set-url origin "$REPO" && echo "从本地代码包克隆"; fi
 cd "$APP"
 
