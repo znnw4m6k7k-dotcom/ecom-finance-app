@@ -16,6 +16,7 @@
     payroll: { title: '工资与提成', sub: '底薪 + 阶梯提成，按人 / 按店铺核算' },
     invoices: { title: '费用与发票', sub: '费用结构、进项 / 销项台账与匹配差异' },
     import: { title: '数据导入', sub: '把平台、物流、ERP、采购、工资、发票数据接进来' },
+    sources: { title: '数据源', sub: '钉钉 / 飞书 / 企微的智能表和知识库 → 工作台' },
     settings: { title: '设置', sub: '店铺费率、提成阶梯与核算参数' },
     formulas: { title: '口径与说明', sub: '每个指标怎么算、数据从哪来、校验规则' }
   };
@@ -23,7 +24,7 @@
     { group: '经营分析', items: [['overview', '经营总览', 'overview'], ['briefing', '经营简报', 'invoices'], ['stores', '店铺利润', 'stores'], ['products', '商品利润', 'products']] },
     { group: '资金与成本', items: [['settlement', '平台结算', 'settlement'], ['logistics', '物流成本', 'logistics'], ['inventory', '采购与库存', 'inventory']] },
     { group: '人效与票据', items: [['payroll', '工资与提成', 'payroll'], ['invoices', '费用与发票', 'invoices']] },
-    { group: '系统', items: [['import', '数据导入', 'import'], ['settings', '设置', 'settings'], ['formulas', '口径与说明', 'info']] }
+    { group: '系统', items: [['import', '数据导入', 'import'], ['sources', '数据源', 'refresh'], ['settings', '设置', 'settings'], ['formulas', '口径与说明', 'info']] }
   ];
   var FORMULA_LABELS = {
     revenue: '营业收入', gmv: 'GMV', refund: '退款', cogs: '商品成本', freight: '物流成本',
@@ -110,7 +111,7 @@
 
   function renderTopbar() {
     var meta = PAGE_META[state.page];
-    var showFilter = ['import', 'settings', 'formulas', 'briefing'].indexOf(state.page) < 0;
+    var showFilter = ['import', 'sources', 'settings', 'formulas', 'briefing'].indexOf(state.page) < 0;
     var showStore = ['overview', 'stores', 'products', 'settlement', 'logistics'].indexOf(state.page) >= 0;
     var scopeText = UI.fullMonth(state.month) + (state.store === 'all' ? ' · 全部店铺' : ' · ' + storeName(state.store));
     var html = '<div class="topbar-title"><h1>' + (apiMode() ? UI.esc(root.FinApi.user.roleLabel) + '视图' : '老板视图') + '</h1><p>数据截止 ' + state.model.months[state.model.months.length - 1] + '-31 · ' + UI.esc(scopeText) + dataLabel() + '</p></div>';
@@ -1006,6 +1007,11 @@
     go: go,
     render: render,
     recompute: function () { compute(); render(); },
+    /** 服务端数据变了（如数据源同步后）：重新拉数据并核算 */
+    reloadData: function () {
+      if (!apiMode()) return Promise.resolve();
+      return root.FinApi.loadDataset().then(function (data) { state.data = data; compute(); render(); });
+    },
     drill: drill,
     scopeStores: scopeStores
   };

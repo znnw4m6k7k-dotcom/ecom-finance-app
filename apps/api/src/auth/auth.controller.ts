@@ -72,6 +72,8 @@ export class AuthController {
       include: { user: true }
     });
     if (!link || !link.user.active) throw new UnauthorizedException(`该钉钉账号（userid：${ident.externalUserId}）尚未绑定系统账号，请把这个 userid 发给管理员绑定`);
+    // 记下 unionId：读钉钉 AI 表格/知识库时作为操作人（只存 ID，不读通讯录）
+    if (ident.unionId && ident.unionId !== link.unionId) await this.prisma.externalIdentity.update({ where: { id: link.id }, data: { unionId: ident.unionId } });
     await this.audit.record(link.user, 'auth.login', { type: 'user', id: link.user.id }, { method: 'dingtalk' }, undefined, req.ip);
     return this.issue(link.user);
   }

@@ -137,3 +137,16 @@ test('模板：11 张表均可生成带示例的 CSV', () => {
     assert.ok(lines[0].length > 0);
   });
 });
+
+test('订单导入：同一订单号多行商品合并成一张订单（不算主键重复）', () => {
+  const D = require('../src/data.js');
+  const csv = [
+    '订单号,店铺,下单日期,支付金额,商品编码,数量,商品金额',
+    'TB2610999001,TB01,2026-10-28,239,SKU001,1,139',
+    'TB2610999001,TB01,2026-10-28,239,SKU005,1,100'
+  ].join('\n');
+  const prep = I.prepare('orders', I.parseCsv(csv), D.buildDemoData(), 'append');
+  assert.equal(prep.ok, true, JSON.stringify(prep.errors));
+  assert.equal(prep.patch.orders.length, 1);
+  assert.equal(prep.patch.order_items.length, 2);
+});
