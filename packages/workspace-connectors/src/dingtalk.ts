@@ -12,8 +12,9 @@
  */
 import { createHmac } from 'node:crypto';
 import {
-  Capabilities, ConnectorConfigError, ConnectorContext, DeliveryResult, EntryLinkInput, ExternalIdentity,
-  InternalUserIdentity, NormalizedEvent, NotSupportedError, NotificationInput, WorkspaceConnector
+  Capabilities, ConnectorConfigError, ConnectorContext, DataCapabilities, DeliveryResult, EntryLinkInput, ExternalIdentity,
+  InternalUserIdentity, KnowledgeNode, KnowledgeRef, NormalizedEvent, NotSupportedError, NotificationInput, Operator, Page,
+  PlatformDataSource, PlatformField, PlatformRecord, SheetInfo, TableRef, TemplateFieldInput, WorkspaceConnector
 } from './types';
 
 export interface DingTalkConfig {
@@ -38,7 +39,7 @@ export function dingtalkRobotSign(timestamp: number, secret: string): string {
   return encodeURIComponent(raw);
 }
 
-export class DingTalkConnector implements WorkspaceConnector {
+export class DingTalkConnector implements WorkspaceConnector, PlatformDataSource {
   readonly provider = 'dingtalk' as const;
   readonly isMock = false;
   private token: { value: string; expiresAt: number } | null = null;
@@ -140,4 +141,145 @@ export class DingTalkConnector implements WorkspaceConnector {
   async buildAppEntry(input: EntryLinkInput, _ctx: ConnectorContext): Promise<string> {
     return `dingtalk://dingtalkclient/page/link?url=${encodeURIComponent(input.url)}&pc_slide=false`;
   }
+
+  // ---------------- 数据源：AI 表格 / 知识库（已实现未联调，接口以钉钉开放平台当前文档为准） ----------------
+
+  dataCapabilities(): DataCapabilities {
+    const hasApp = !!(this.cfg.appKey && this.cfg.appSecret);
+    return { readTables: hasApp, createTables: hasApp, readKnowledge: hasApp, readDocText: hasApp, readUserCreatedTables: hasApp };
+  }
+
+  /** 新版接口（api.dingtalk.com）：accessToken 放在 x-acs-dingtalk-access-token 头里 */
+  private async api(method: 'GET' | 'POST', pathAndQuery: string, body?: unknown): Promise<any> {
+    const token = await this.getAccessToken();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), this.cfg.timeoutMs ?? 15000);
+    try {
+      const res = await this.fetchImpl(`${this.apiBase}${pathAndQuery}`, {
+        method,
+        headers: { 'content-type': 'application/json', 'x-acs-dingtalk-access-token': token },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: ctrl.signal
+      });
+      const json: any = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const code = json?.code ? `${json.code}` : `HTTP ${res.status}`;
+        const hint = res.status === 403 || /forbidden|permission|NoPermission/i.test(code)
+          ? '（没有权限：请确认钉钉应用已开通 AI 表格 / 知识库相关权限并发布，且绑定的员工本人能看到这份文档）'
+          : res.status === 404 ? '（找不到：请检查链接是否正确、文档是否已删除）' : '';
+        const err = new Error(`钉钉接口返回 ${code}${json?.message ? '：' + json.message : ''}${hint}`);
+        (err as any).retryable = res.status >= 500 || res.status === 429;
+        (err as any).status = res.status;
+        throw err;
+      }
+      return json;
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') { const err = new Error('钉钉接口超时'); (err as any).retryable = true; throw err; }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private op(op: Operator): string {
+    if (!op.unionId) throw new ConnectorConfigError('读取钉钉文档需要操作人的 unionId：请先在钉钉里打开工作台完成免登绑定');
+    return encodeURIComponent(op.unionId);
+  }
+
+  /** AI 表格链接：https://alidocs.dingtalk.com/i/nodes/{baseId}?…sheetId=… （sheetId 可能在 iframeQuery 里） */
+  parseTableLink(url: string): TableRef {
+    const u = safeUrl(url);
+    const m = u?.pathname.match(/\/nodes\/([A-Za-z0-9_-]{6,})/);
+    if (!u || !/dingtalk\.com$/.test(u.hostname) || !m) throw new Error('不是钉钉 AI 表格链接：请在钉钉里打开表格，点右上角“分享/复制链接”后粘贴');
+    let sheetId = u.searchParams.get('sheetId') || undefined;
+    const iq = u.searchParams.get('iframeQuery');
+    if (!sheetId && iq) sheetId = new URLSearchParams(iq).get('sheetId') || undefined;
+    return { baseId: m[1], sheetId };
+  }
+
+  /** 知识库链接：/i/spaces/{workspaceId}/… 或某个目录节点 /i/nodes/{nodeId} */
+  parseKnowledgeLink(url: string): KnowledgeRef {
+    const u = safeUrl(url);
+    if (!u || !/dingtalk\.com$/.test(u.hostname)) throw new Error('不是钉钉知识库链接');
+    const sp = u.pathname.match(/\/spaces\/([A-Za-z0-9_-]{6,})/);
+    if (sp) return { workspaceId: sp[1] };
+    const nd = u.pathname.match(/\/nodes\/([A-Za-z0-9_-]{6,})/);
+    if (nd) return { rootNodeId: nd[1] };
+    throw new Error('无法从链接识别知识库：请复制知识库首页或某个目录的链接');
+  }
+
+  async listSheets(ref: TableRef, op: Operator): Promise<SheetInfo[]> {
+    const json = await this.api('GET', `/v1.0/notable/bases/${encodeURIComponent(ref.baseId)}/sheets?operatorId=${this.op(op)}`);
+    const list: any[] = json?.value ?? json?.sheets ?? [];
+    return list.map((s) => ({ sheetId: String(s.id ?? s.sheetId), name: String(s.name ?? '') }));
+  }
+
+  async listFields(ref: TableRef, op: Operator): Promise<PlatformField[]> {
+    if (!ref.sheetId) throw new Error('缺少数据表（sheet）');
+    const json = await this.api('GET', `/v1.0/notable/bases/${encodeURIComponent(ref.baseId)}/sheets/${encodeURIComponent(ref.sheetId)}/fields?operatorId=${this.op(op)}`);
+    const list: any[] = json?.value ?? json?.fields ?? [];
+    return list.map((f) => ({ id: f.id, name: String(f.name), type: String(f.type ?? 'text') }));
+  }
+
+  async listRecords(ref: TableRef, op: Operator, pageToken?: string): Promise<Page<PlatformRecord>> {
+    if (!ref.sheetId) throw new Error('缺少数据表（sheet）');
+    const json = await this.api('POST', `/v1.0/notable/bases/${encodeURIComponent(ref.baseId)}/sheets/${encodeURIComponent(ref.sheetId)}/records/list?operatorId=${this.op(op)}`,
+      { maxResults: 100, ...(pageToken ? { nextToken: pageToken } : {}) });
+    const items = (json?.records ?? []).map((r: any) => ({ id: String(r.id), fields: r.fields ?? {} }));
+    return { items, nextPageToken: json?.hasMore && json?.nextToken ? String(json.nextToken) : undefined };
+  }
+
+  async createSheet(ref: TableRef, input: { name: string; fields: TemplateFieldInput[] }, op: Operator): Promise<SheetInfo> {
+    const fields = input.fields.map((f) => {
+      if (f.type === 'singleSelect') return { name: f.name, type: 'singleSelect', property: { choices: (f.options || []).map((name) => ({ name })) } };
+      if (f.type === 'date') return { name: f.name, type: 'date', property: { formatter: 'YYYY-MM-DD' } };
+      return { name: f.name, type: f.type };
+    });
+    const json = await this.api('POST', `/v1.0/notable/bases/${encodeURIComponent(ref.baseId)}/sheets?operatorId=${this.op(op)}`, { name: input.name, fields });
+    return { sheetId: String(json?.id ?? json?.sheetId), name: String(json?.name ?? input.name) };
+  }
+
+  async listKnowledgeNodes(ref: KnowledgeRef, op: Operator, parentNodeId?: string, pageToken?: string): Promise<Page<KnowledgeNode>> {
+    let parent = parentNodeId || ref.rootNodeId;
+    if (!parent) {
+      if (!ref.workspaceId) throw new Error('缺少知识库 ID');
+      const ws = await this.api('GET', `/v2.0/wiki/workspaces/${encodeURIComponent(ref.workspaceId)}?operatorId=${this.op(op)}`);
+      parent = ws?.workspace?.rootNodeId;
+      if (!parent) throw new Error('钉钉没有返回知识库根目录');
+    }
+    const q = new URLSearchParams({ parentNodeId: parent, operatorId: op.unionId || '', maxResults: '50' });
+    if (!op.unionId) this.op(op);
+    if (pageToken) q.set('nextToken', pageToken);
+    const json = await this.api('GET', `/v2.0/wiki/nodes?${q.toString()}`);
+    const items: KnowledgeNode[] = (json?.nodes ?? []).map((n: any) => {
+      const folder = String(n.type).toUpperCase() === 'FOLDER';
+      const cat = String(n.category ?? '').toUpperCase();
+      const ext = String(n.extension ?? '').toLowerCase();
+      const kind: KnowledgeNode['kind'] = folder ? 'folder' : cat === 'DOCUMENT' || ext === 'adoc' ? 'doc' : cat === 'TABLE' || ext === 'able' || ext === 'axls' ? 'table' : cat ? 'file' : 'other';
+      return { nodeId: String(n.nodeId), name: String(n.name ?? ''), kind, url: n.url, updatedAt: n.modifiedTime ?? n.updateTime, hasChildren: folder || !!n.hasChildren, docId: String(n.nodeId) };
+    });
+    return { items, nextPageToken: json?.nextToken ? String(json.nextToken) : undefined };
+  }
+
+  /** 读文档正文：查询文档块元素后抽取文字（接口与返回结构需联调确认） */
+  async getDocText(node: KnowledgeNode, op: Operator): Promise<string> {
+    if (node.kind !== 'doc') return '';
+    const json = await this.api('GET', `/v1.0/doc/suites/documents/${encodeURIComponent(node.docId || node.nodeId)}/blocks?operatorId=${this.op(op)}`);
+    return extractText(json?.result?.data ?? json?.result ?? json).trim();
+  }
+}
+
+function safeUrl(s: string): URL | null { try { return new URL(String(s).trim()); } catch { return null; } }
+
+/** 从文档块结构里递归取出所有文字，块之间换行 */
+export function extractText(v: unknown, depth = 0): string {
+  if (depth > 30 || v == null) return '';
+  if (Array.isArray(v)) return v.map((x) => extractText(x, depth + 1)).filter(Boolean).join('\n');
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    const own = typeof o.text === 'string' ? o.text : typeof o.content === 'string' ? o.content : '';
+    const kids = Object.entries(o).filter(([k, x]) => k !== 'text' && k !== 'content' && x && typeof x === 'object').map(([, x]) => extractText(x, depth + 1)).filter(Boolean).join(own ? '' : '\n');
+    return [own, kids].filter(Boolean).join('');
+  }
+  return '';
 }

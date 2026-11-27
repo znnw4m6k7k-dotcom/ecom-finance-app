@@ -17,7 +17,7 @@ export async function seed(prisma: PrismaClient, opts: { passwords?: Partial<Rec
   };
   const demo: Dataset = buildDemoData();
   if (opts.reset) {
-    const tables = ['AuditEvent', 'NotificationDelivery', 'AiCall', 'BriefingVersion', 'Briefing', 'ImportBatch', 'ExternalIdentity', 'User',
+    const tables = ['AuditEvent', 'SyncRun', 'SourceRow', 'SyncConflict', 'KnowledgeDoc', 'DataSource', 'NotificationDelivery', 'AiCall', 'BriefingVersion', 'Briefing', 'ImportBatch', 'ExternalIdentity', 'User',
       ...TABLE_SPECS.map((s) => s.delegate.charAt(0).toUpperCase() + s.delegate.slice(1)), 'Tenant'];
     await prisma.$executeRawUnsafe(`TRUNCATE ${tables.map((t) => `"${t}"`).join(', ')} RESTART IDENTITY CASCADE`);
   }

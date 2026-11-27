@@ -18,6 +18,8 @@ const EnvSchema = z.object({
   /** 钉钉 AppKey（即 clientId，非密钥；AppSecret 只由连接器读取） */
   DINGTALK_APP_KEY: z.string().optional(),
   /** 钉钉 JSAPI 脚本地址（版本以钉钉官方文档为准） */
+  /** 数据源定时同步：on（默认，测试环境自动关闭）| off */
+  SOURCE_SYNC_SCHEDULER: z.enum(['on', 'off']).default('on'),
   DINGTALK_JSAPI_URL: z.string().default('https://g.alicdn.com/dingding/dingtalk-jsapi/2.10.3/dingtalk.open.js')
 });
 export type AppConfig = z.infer<typeof EnvSchema>;
@@ -38,3 +40,5 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
 export const APP_CONFIG = Symbol('APP_CONFIG');
 export const MODEL_PROVIDER = Symbol('MODEL_PROVIDER');
 export const WORKSPACE_CONNECTOR = Symbol('WORKSPACE_CONNECTOR');
+/** 平台智能表/知识库读取（与当前连接器同一平台） */
+export const DATA_SOURCE = Symbol('DATA_SOURCE');

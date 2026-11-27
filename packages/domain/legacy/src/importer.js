@@ -317,7 +317,8 @@
       });
       // 主键 / 唯一性
       var pk = pkField(tableId);
-      if (pk && values[pk]) {
+      // 订单、采购单一行一个商品，同一单号多行是正常的（由 transformOrders / transformPurchase 合并），不算重复
+      if (pk && values[pk] && tableId !== 'orders' && tableId !== 'purchase') {
         if (seenIds[values[pk]]) errors.push(err(rowNo, pk, values[pk], '文件内主键重复'));
         seenIds[values[pk]] = true;
       }

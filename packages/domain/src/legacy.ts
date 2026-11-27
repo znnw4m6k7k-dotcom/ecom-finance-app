@@ -94,6 +94,14 @@ export const IMPORT_TABLE_IDS: string[] = templates.TABLES
   ? templates.TABLES.map((t: Row) => t.id)
   : ['orders', 'shipments', 'platform_bills', 'payouts', 'purchase', 'employees', 'expenses', 'invoices', 'skus', 'stores', 'opening_inventory'];
 
+export interface ImportTemplateField { key: string; label: string; type: string; required: boolean; aliases?: string[]; values?: string[]; fk?: string }
+export interface ImportTemplate { id: string; label: string; desc?: string; tables: string[]; fields: ImportTemplateField[] }
+
+/** 导入模板定义（表结构、中文名、别名），文件导入与平台智能表同步共用 */
+export function getImportTemplate(tableId: string): ImportTemplate | null {
+  return templates.getTable(tableId) || null;
+}
+
 export function parseCsv(text: string): ParsedTable {
   const p = importer.parseCsv(text);
   return { headers: p.headers, rows: p.rows, source: 'csv' };

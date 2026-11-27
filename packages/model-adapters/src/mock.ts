@@ -23,7 +23,9 @@ export class MockModelProvider implements ModelProvider {
     let text: string;
     if (b === 'invalid_json') text = '这不是 JSON';
     else if (b === 'bad_schema') text = JSON.stringify({ headline: 'x' });
-    else text = this.responder ? this.responder(req) : defaultBriefing(req);
+    else if (this.responder) text = this.responder(req);
+    else if (req.messages.some((m) => m.role === 'system' && m.content.startsWith('FIELD_MAPPING_V1'))) text = mockFieldMapping(req);
+    else text = defaultBriefing(req);
     const inputTokens = Math.ceil(req.messages.reduce((s, m) => s + m.content.length, 0) / 2);
     const outputTokens = Math.ceil(text.length / 2);
     return { text, usage: { inputTokens, outputTokens }, model: this.model, provider: this.id, latencyMs: 1, costCny: 0 };
@@ -58,4 +60,20 @@ function defaultBriefing(req: CompletionRequest): string {
     risks,
     actions: [{ owner: '财务', title: '核对预警事项', detail: '逐条核对系统预警与对账差异，确认后在系统中备注原因。' }]
   });
+}
+
+/** 模拟“字段对应”：只按名称包含关系猜（不是真 AI，仅供本地演示与测试） */
+function mockFieldMapping(req: CompletionRequest): string {
+  const user = req.messages.find((m) => m.role === 'user')?.content ?? '';
+  const [sys, cols] = user.split('客户表格的列');
+  const targets = [...(sys || '').matchAll(/^- (\w+)：([^（\n]+)/gm)].map((m) => ({ key: m[1], label: m[2].trim() }));
+  const mapping: Record<string, string | null> = {};
+  const used = new Set<string>();
+  for (const m of (cols || '').matchAll(/^- ([^：\n]+)：/gm)) {
+    const col = m[1].trim();
+    const hit = targets.find((t) => !used.has(t.key) && (col.includes(t.label) || t.label.includes(col)));
+    mapping[col] = hit ? hit.key : null;
+    if (hit) used.add(hit.key);
+  }
+  return JSON.stringify({ mapping });
 }

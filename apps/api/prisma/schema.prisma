@@ -58,6 +58,8 @@ model ExternalIdentity {
   user           User     @relation(fields: [userId], references: [id])
   provider       String
   externalUserId String
+  /// 钉钉 unionId：读 AI 表格/知识库时作为操作人（按该员工在钉钉里的可见范围读取）；免登时自动记录
+  unionId        String?
   createdAt      DateTime @default(now())
 
   @@unique([tenantId, provider, externalUserId])
@@ -387,4 +389,121 @@ model AuditEvent {
   createdAt  DateTime @default(now())
 
   @@index([tenantId, createdAt])
+}
+
+// ---------------- 数据源：平台智能表 / 知识库 → 工作台（单向） ----------------
+
+/// 一个数据源 = 平台上的一张智能表（kind=table）或一个知识库（kind=knowledge）
+model DataSource {
+  id                   String    @id @default(uuid())
+  tenantId             String
+  kind                 String // table | knowledge
+  provider             String // dingtalk | feishu | wecom | mock
+  isMock               Boolean   @default(false)
+  name                 String
+  link                 String
+  ref                  Json // 平台侧定位：{baseId, sheetId} 或 {workspaceId, rootNodeId}
+  /// 表格：写入哪张业务表（导入模板 ID，如 orders / expenses / platform_bills）
+  tableId              String?
+  /// 表格：平台字段名 → 系统字段 key；mappingBy 记录每列是规则/AI/人工给出的
+  mapping              Json?
+  mappingBy            Json?
+  /// draft = AI/规则草稿，财务确认前不能同步；confirmed = 已确认
+  mappingStatus        String    @default("draft")
+  mappingConfirmedById String?
+  mappingConfirmedAt   DateTime?
+  /// 情况一：由工作台在平台生成的模板表（字段天然对应）
+  fromTemplate         Boolean   @default(false)
+  /// 知识库：data = 数据型（全文检索，AI 可引用）；reference = 查询型（只同步目录）
+  knowledgeMode        String?
+  /// 定时同步间隔（分钟），0 = 只手动同步
+  syncIntervalMin      Int       @default(60)
+  active               Boolean   @default(true)
+  lastSyncAt           DateTime?
+  lastSyncStatus       String? // ok | partial | failed
+  createdById          String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([tenantId, kind])
+}
+
+/// 每次同步一条记录（手动 / 定时）
+model SyncRun {
+  id              String   @id @default(uuid())
+  tenantId        String
+  dataSourceId    String
+  trigger         String // manual | schedule
+  status          String // ok | partial | failed
+  isMock          Boolean
+  read            Int      @default(0)
+  created         Int      @default(0)
+  updated         Int      @default(0)
+  unchanged       Int      @default(0)
+  conflicts       Int      @default(0)
+  missingAtSource Int      @default(0)
+  errorCount      Int      @default(0)
+  errors          Json
+  error           String?
+  createdById     String?
+  createdAt       DateTime @default(now())
+
+  @@index([tenantId, dataSourceId, createdAt])
+}
+
+/// 工作台里每条业务数据的来源：哪个数据源写的、写入时的内容指纹；没有记录 = 文件导入或种子数据
+model SourceRow {
+  tenantId          String
+  tableId           String
+  rowKey            String
+  dataSourceId      String?
+  hash              String
+  /// 平台上已删除、等财务确认（不自动删）
+  deletedAtSource   Boolean   @default(false)
+  deletedDetectedAt DateTime?
+  updatedAt         DateTime  @updatedAt
+
+  @@id([tenantId, tableId, rowKey])
+  @@index([tenantId, dataSourceId])
+}
+
+/// 同一编号的数据来源之间不一致：不自动覆盖，等财务选择
+model SyncConflict {
+  id            String    @id @default(uuid())
+  tenantId      String
+  dataSourceId  String
+  tableId       String
+  rowKey        String
+  existingOwner String?
+  existing      Json
+  incoming      Json
+  status        String    @default("open") // open | accepted | rejected | superseded
+  resolvedById  String?
+  resolvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([tenantId, status])
+  @@index([tenantId, dataSourceId, tableId, rowKey])
+}
+
+/// 知识库条目：数据型存正文（可检索、可被 AI 引用）；查询型只存标题与链接
+model KnowledgeDoc {
+  id              String    @id @default(uuid())
+  tenantId        String
+  dataSourceId    String
+  externalId      String
+  title           String
+  path            String
+  url             String?
+  kind            String
+  mode            String // data | reference
+  content         String?
+  contentChars    Int       @default(0)
+  truncated       Boolean   @default(false)
+  updatedAtSource String?
+  deletedAtSource Boolean   @default(false)
+  syncedAt        DateTime  @default(now())
+
+  @@unique([tenantId, dataSourceId, externalId])
+  @@index([tenantId, mode])
 }
