@@ -21,7 +21,8 @@
     "test:api": "npm run test -w apps/api",
     "db:migrate": "npm run db:migrate -w apps/api",
     "db:seed": "npm run db:seed -w apps/api",
-    "dev": "npm run start -w apps/api"
+    "dev": "npm run start -w apps/api",
+    "test:infra": "node --test infra/tests/*.test.mjs"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
